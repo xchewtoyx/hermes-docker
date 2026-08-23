@@ -10,9 +10,6 @@ permissions:
   contents: read
   packages: write
 
-env:
-  GHCR_IMAGE: ghcr.io/xchewtoyx/hermes-docker
-
 jobs:
   ghcr:
     runs-on: ubuntu-latest
@@ -27,15 +24,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute tags
+      - name: Tags
         id: meta
-        run: |
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            TAGS="${{ env.GHCR_IMAGE }}:latest,${{ env.GHCR_IMAGE }}:${{ github.ref_name }}"
-          else
-            TAGS="${{ env.GHCR_IMAGE }}:latest,${{ env.GHCR_IMAGE }}:sha-${{ github.sha }}"
-          fi
-          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/xchewtoyx/hermes-docker
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+            type=ref,event=tag
 
       - uses: docker/build-push-action@v6
         with:
@@ -62,11 +59,18 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: xchewtoyx/hermes-docker
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+
       - uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: |
-            xchewtoyx/hermes-docker:latest
-            ${{ github.ref_type == 'tag' && format('xchewtoyx/hermes-docker:{0}', github.ref_name) || '' }}
+          tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
