@@ -42,11 +42,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Push to Docker Hub too — enable by adding repo secrets:
-  #   DOCKERHUB_USERNAME  (your Docker Hub username)
-  #   DOCKERHUB_TOKEN     (an access token with Read/Write, not your password)
+  # Push to Docker Hub too — enable with:
+  #   gh variable set DOCKERHUB_ENABLED -b true
+  #   gh secret set DOCKERHUB_USERNAME      (your Docker Hub username)
+  #   gh secret set DOCKERHUB_TOKEN         (an access token with Read/Write, not your password)
+  # Job-level `if` cannot read secrets (only vars), which is why the flag is a variable.
   dockerhub:
-    if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+    if: ${{ vars.DOCKERHUB_ENABLED == 'true' }}
     needs: ghcr
     runs-on: ubuntu-latest
     steps:
