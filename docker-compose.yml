@@ -1,0 +1,53 @@
+# Hermes Agent — dedicated containerized instance.
+#
+# SUPERVISION: the official image manages its own processes with s6-overlay (PID 1):
+#   - `gateway run` is restarted within seconds if it crashes (s6-supervise)
+#   - HERMES_DASHBOARD=1 registers the dashboard as a supervised s6 sidecar on 9119
+#   - per-profile gateways get their own s6 slots; logs rotate via s6-log
+#   - container-level recovery is Docker's `restart: unless-stopped` (outer net)
+#
+# DATA: the entire "brain" lives in ~/.hermes, mounted at /opt/data
+# (config, .env, memories, skills, state.db, cron, kanban, sessions, ...).
+# The image is immutable — upgrades = pull a new tag, never edit the container.
+#
+# IMAGE: pulled from GHCR (built by CI). `build: .` is kept so you can still
+# iterate locally on the Dockerfile. Upgrades: docker compose pull && up -d.
+
+services:
+  hermes:
+    image: ghcr.io/xchewtoyx/hermes-docker:latest
+    build: .                    # optional local build override
+    container_name: hermes
+    restart: unless-stopped
+    command: gateway run        # s6-supervised gateway; cron scheduler runs inside it
+
+    env_file:
+      - hermes.env              # PUID/PGID, TZ, dashboard basic-auth (edit before up)
+
+    environment:
+      - HERMES_DASHBOARD=1      # supervised dashboard service on 9119
+
+    ports:
+      - "8642:8642"             # gateway OpenAI-compatible API + health endpoint
+      - "9119:9119"             # dashboard (auth-gated — see hermes.env)
+
+    volumes:
+      - ~/.hermes:/opt/data     # single source of truth for all Hermes state
+      - ~/repos:/opt/repos      # OKF wiki repos + rgh-botnet (heartbeat cron uses /opt/repos)
+
+    shm_size: 1g                # Playwright/browser tools need shared memory
+
+    deploy:
+      resources:
+        limits:
+          memory: 4g            # tune to the host (migrating box: 15Gi RAM / 4 vCPU)
+          cpus: "2.0"
+
+    # Gateway liveness. `hermes gateway status` exits 0 when the supervised gateway
+    # is up (reports "Manager: s6 (container supervisor)" inside the container).
+    healthcheck:
+      test: ["CMD", "hermes", "-p", "default", "gateway", "status"]
+      interval: 60s
+      timeout: 20s
+      retries: 5
+      start_period: 60s

@@ -1,0 +1,9 @@
+.git
+.github
+.gitignore
+.dockerignore
+README.md
+MIGRATION.md
+docker-compose.yml
+hermes.env
+*.zip

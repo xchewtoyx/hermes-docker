@@ -1,0 +1,3 @@
+*.zip
+hermes-backup-*
+.venv/
