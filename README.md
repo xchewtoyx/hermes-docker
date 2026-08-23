@@ -20,11 +20,10 @@ docker compose pull
 docker compose up -d
 ```
 
-Private-repo note: `ghcr.io` packages inherit repo visibility, so pull from a new
-host requires a login first (repo-private):
+The repo is public, so the image pulls anonymously — no login needed on the new host:
 
 ```bash
-docker login ghcr.io -u xchewtoyx   # PAT with read:packages, or `gh auth token`
+docker pull ghcr.io/xchewtoyx/hermes-docker:latest
 ```
 
 ## Layout

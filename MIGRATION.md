@@ -93,8 +93,11 @@ hermes.env to the owning user).
 
 ## Phase 4 — bring it up
 
-    docker compose build && docker compose up -d
+    docker compose pull && docker compose up -d
     docker compose logs -f hermes          # watch gateway boot + Slack connect
+
+(`docker compose build` is only needed when iterating on the Dockerfile locally —
+the image normally comes from ghcr.io, built by CI.)
 
 Verification checklist:
 
