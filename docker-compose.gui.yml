@@ -6,7 +6,7 @@ services:
     image: ghcr.io/xchewtoyx/hermes-docker-gui:latest
     build:
       context: .
-      dockerfile: Dockerfile.gui
+      target: gui
     ports:
       # Passwordless noVNC is deliberately host-loopback-only. On a remote
       # Linux host, reach it through an SSH tunnel rather than exposing it.

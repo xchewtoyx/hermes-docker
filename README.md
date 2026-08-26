@@ -4,7 +4,7 @@ Two images derived from the official `nousresearch/hermes-agent` distribution:
 
 | Image | Purpose |
 | --- | --- |
-| `ghcr.io/xchewtoyx/hermes-docker` | Headless Hermes plus `curl` and `jq` for diagnostics and automation |
+| `ghcr.io/xchewtoyx/hermes-docker` | Headless Hermes plus shared developer tooling |
 | `ghcr.io/xchewtoyx/hermes-docker-gui` | XFCE/Xvfb desktop, Chromium, Cua Driver, and a local noVNC viewer |
 
 Both are published as native `linux/amd64` and `linux/arm64` images, so Docker
@@ -82,6 +82,30 @@ Both derived images install `/etc/profile.d/hermes-path.sh`. This restores
 Debian's `/etc/profile` resets `PATH`, so `hermes` remains available in nested
 login shells such as `bash -lc`.
 
+## Developer tools
+
+Both images inherit one `devtools` stage from `Dockerfile`, allowing Docker
+Build Cloud to reuse the same layers across the `headless` and `gui` targets.
+The layer explicitly provides:
+
+- `uv` and `uvx` 0.12.6, copied from Astral's pinned multi-architecture image
+- `gh` 2.98.0, installed from GitHub's immutable release archives with
+  architecture-specific SHA-256 verification
+- `curl`, `jq`, and CA certificates
+
+The upstream Hermes image currently also supplies Git, OpenSSH, ripgrep,
+Make, GCC/G++, Node/npm, and Python. Those inherited tools are useful but are
+not pinned by this project.
+
+GitHub authentication is instance state, not image content. Agent subprocesses
+use `/opt/data/home` as `HOME`, so authenticate that persistent home explicitly:
+
+```bash
+docker exec --user hermes -e HOME=/opt/data/home -it hermes gh auth login
+```
+
+Do not add GitHub tokens or `hosts.yml` to either image.
+
 ## GUI / local computer use
 
 Use the Compose overlay to select the GUI image while retaining the volumes,
@@ -137,15 +161,14 @@ The workflow requires these repository settings:
 - Optional variable `DOCKERHUB_ENABLED=true` to publish both images to Docker
   Hub as well as GHCR.
 
-The Cua Driver version is pinned by `CUA_DRIVER_VERSION` in `Dockerfile.gui` and
-can be overridden with a build argument. Cua telemetry and background update
-checks are disabled in the immutable image; upgrades arrive through a rebuilt
-container image.
+The Cua Driver version is pinned by `CUA_DRIVER_VERSION` in the `gui` target of
+`Dockerfile` and can be overridden with a build argument. Cua telemetry and
+background update checks are disabled in the immutable image; upgrades arrive
+through a rebuilt container image.
 
 ## Layout
 
-- `Dockerfile` — the derived image (ARG BASE_IMAGE to pin the upstream tag/digest)
-- `Dockerfile.gui` — GUI/computer-use image and pinned Cua Driver install
+- `Dockerfile` — shared `devtools` stage plus `headless` and `gui` targets
 - `docker-compose.yml` — greenfield deployment with a Docker-managed state volume
 - `docker-compose.gui.yml` — overlay selecting the GUI image and local noVNC port
 - `docker-compose.migration.yml` — optional existing-state and repository bind mounts
