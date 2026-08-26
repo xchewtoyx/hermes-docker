@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+export HOME=/opt/data
+export DISPLAY="${DISPLAY:-:99}"
+export XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-x11}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/hermes-runtime}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/tmp/hermes-session-bus}"
+export NO_AT_BRIDGE="${NO_AT_BRIDGE:-0}"
+
+display_number="${DISPLAY#:}"
+if [[ ! "${display_number}" =~ ^[0-9]+$ ]]; then
+    echo "hermes-gui: DISPLAY must use the local :N form, got ${DISPLAY}" >&2
+    exit 2
+fi
+
+case "${DBUS_SESSION_BUS_ADDRESS}" in
+    unix:path=*) dbus_socket="${DBUS_SESSION_BUS_ADDRESS#unix:path=}" ;;
+    *)
+        echo "hermes-gui: DBUS_SESSION_BUS_ADDRESS must use unix:path=…" >&2
+        exit 2
+        ;;
+esac
+
+mkdir -p "${XDG_RUNTIME_DIR}"
+chmod 0700 "${XDG_RUNTIME_DIR}"
+
+DBUS_PID=""
+XVFB_PID=""
+XFCE_PID=""
+VNC_PID=""
+NOVNC_PID=""
+
+# shellcheck disable=SC2329  # invoked by the EXIT trap
+cleanup() {
+    local pid
+    trap - EXIT
+    for pid in "${NOVNC_PID}" "${VNC_PID}" "${XFCE_PID}" "${XVFB_PID}" "${DBUS_PID}"; do
+        if [[ -n "${pid}" ]]; then
+            kill "${pid}" 2>/dev/null || true
+        fi
+    done
+    for pid in "${NOVNC_PID}" "${VNC_PID}" "${XFCE_PID}" "${XVFB_PID}" "${DBUS_PID}"; do
+        if [[ -n "${pid}" ]]; then
+            wait "${pid}" 2>/dev/null || true
+        fi
+    done
+    rm -f "${dbus_socket}" "/tmp/.X${display_number}-lock" "/tmp/.X11-unix/X${display_number}"
+}
+
+# shellcheck disable=SC2329  # invoked by the TERM/INT traps
+terminate() {
+    exit 0
+}
+
+trap cleanup EXIT
+trap terminate TERM INT
+
+# A restarted s6 service must not inherit endpoints left by an unclean child.
+rm -f "${dbus_socket}" "/tmp/.X${display_number}-lock" "/tmp/.X11-unix/X${display_number}"
+
+# One shared session bus for XFCE, AT-SPI, Hermes, and cua-driver.
+dbus-daemon \
+    --session \
+    --address="${DBUS_SESSION_BUS_ADDRESS}" \
+    --nofork \
+    --nopidfile &
+DBUS_PID=$!
+
+for _ in $(seq 1 50); do
+    [[ -S "${dbus_socket}" ]] && break
+    kill -0 "${DBUS_PID}" 2>/dev/null || {
+        echo "hermes-gui: session D-Bus exited during startup" >&2
+        exit 1
+    }
+    sleep 0.1
+done
+[[ -S "${dbus_socket}" ]] || {
+    echo "hermes-gui: timed out waiting for session D-Bus" >&2
+    exit 1
+}
+
+Xvfb "${DISPLAY}" \
+    -screen 0 "${GUI_SCREEN:-1440x900x24}" \
+    -nolisten tcp \
+    -ac &
+XVFB_PID=$!
+
+for _ in $(seq 1 100); do
+    xdpyinfo -display "${DISPLAY}" >/dev/null 2>&1 && break
+    kill -0 "${XVFB_PID}" 2>/dev/null || {
+        echo "hermes-gui: Xvfb exited during startup" >&2
+        exit 1
+    }
+    sleep 0.1
+done
+xdpyinfo -display "${DISPLAY}" >/dev/null 2>&1 || {
+    echo "hermes-gui: timed out waiting for Xvfb" >&2
+    exit 1
+}
+
+startxfce4 &
+XFCE_PID=$!
+
+child_pids=("${DBUS_PID}" "${XVFB_PID}" "${XFCE_PID}")
+
+if [[ "${ENABLE_NOVNC:-1}" == "1" ]]; then
+    # x11vnc is passwordless but listens only on the container loopback
+    # interface. websockify is the sole VNC-facing listener.
+    x11vnc \
+        -display "${DISPLAY}" \
+        -localhost \
+        -forever \
+        -shared \
+        -nopw \
+        -rfbport "${VNC_PORT:-5900}" &
+    VNC_PID=$!
+
+    websockify \
+        --web=/usr/share/novnc \
+        "${NOVNC_LISTEN_ADDRESS:-0.0.0.0}:${NOVNC_PORT:-6080}" \
+        "127.0.0.1:${VNC_PORT:-5900}" &
+    NOVNC_PID=$!
+    child_pids+=("${VNC_PID}" "${NOVNC_PID}")
+fi
+
+# Any essential child exiting tears down the whole desktop session. s6 then
+# restarts it as a clean unit instead of leaving a partially working display.
+set +e
+wait -n "${child_pids[@]}"
+status=$?
+set -e
+exit "${status}"

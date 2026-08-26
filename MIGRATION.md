@@ -96,23 +96,31 @@ hermes.env to the owning user).
     docker compose pull && docker compose up -d
     docker compose logs -f hermes          # watch gateway boot + Slack connect
 
+For the GUI/computer-use image, select the Compose overlay instead:
+
+    docker compose -f docker-compose.yml -f docker-compose.gui.yml pull
+    docker compose -f docker-compose.yml -f docker-compose.gui.yml up -d
+
+The noVNC viewer is then available on `http://127.0.0.1:6080/vnc.html`; use an
+SSH tunnel when the Docker host is remote rather than publishing it publicly.
+
 (`docker compose build` is only needed when iterating on the Dockerfile locally —
 the image normally comes from ghcr.io, built by CI.)
 
 Verification checklist:
 
-    docker exec hermes hermes -p default gateway status   # "Manager: s6 (container supervisor)"
+    docker exec hermes /opt/hermes/bin/hermes -p default gateway status   # "Manager: s6 (container supervisor)"
     docker exec hermes /command/s6-svstat /run/service/gateway-default
-    docker exec hermes hermes doctor
-    docker exec hermes hermes cron status                 # scheduler lives inside the gateway
+    docker exec hermes /opt/hermes/bin/hermes doctor
+    docker exec hermes /opt/hermes/bin/hermes cron status # scheduler lives inside the gateway
     curl -s http://localhost:8642/v1/models -H "Authorization: Bearer $API_SERVER_KEY"
     # dashboard: http://<new-host>:9119  → basic-auth login
     # Slack: DM the bot — it must reply
-    # Only if Nous Portal OAuth broke (auth.json should carry it): docker exec hermes hermes setup --portal
+    # Only if Nous Portal OAuth broke (auth.json should carry it): docker exec hermes /opt/hermes/bin/hermes setup --portal
 
 Recommended for an unattended gateway (docs guidance):
 
-    docker exec hermes hermes config set tool_loop_guardrails.hard_stop_enabled true
+    docker exec hermes /opt/hermes/bin/hermes config set tool_loop_guardrails.hard_stop_enabled true
 
 ## Phase 5 — cutover notes
 

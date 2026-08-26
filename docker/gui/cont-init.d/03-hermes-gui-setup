@@ -1,0 +1,25 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+set -eu
+
+display="${DISPLAY:-:99}"
+display_number="${display#:}"
+case "${display_number}" in
+    ''|*[!0-9]*)
+        echo "03-hermes-gui-setup: DISPLAY must use the local :N form" >&2
+        exit 2
+        ;;
+esac
+
+runtime_dir="${XDG_RUNTIME_DIR:-/tmp/hermes-runtime}"
+case "${DBUS_SESSION_BUS_ADDRESS:-unix:path=/tmp/hermes-session-bus}" in
+    unix:path=*) dbus_socket="${DBUS_SESSION_BUS_ADDRESS#unix:path=}" ;;
+    *)
+        echo "03-hermes-gui-setup: D-Bus address must use unix:path=…" >&2
+        exit 2
+        ;;
+esac
+
+install -d -m 0700 -o hermes -g hermes "${runtime_dir}"
+install -d -m 1777 /tmp/.X11-unix
+rm -f "${dbus_socket}" "/tmp/.X${display_number}-lock" "/tmp/.X11-unix/X${display_number}"
