@@ -51,6 +51,9 @@ ENV DISPLAY=:99 \
     CUA_DRIVER_RS_TELEMETRY_ENABLED=false \
     CUA_DRIVER_RS_UPDATE_CHECK=false
 
+# /etc/profile resets PATH in `bash -lc`; keep the baked Hermes CLI paths for
+# operator login shells as well as ordinary Docker and supervised processes.
+COPY --chmod=0644 docker/common/hermes-path.sh /etc/profile.d/hermes-path.sh
 COPY --chmod=0755 docker/gui/hermes-gui /usr/local/bin/hermes-gui
 COPY --chmod=0755 docker/gui/cont-init.d/03-hermes-gui-setup \
     /etc/cont-init.d/03-hermes-gui-setup

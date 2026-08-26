@@ -4,7 +4,7 @@ Two images derived from the official `nousresearch/hermes-agent` distribution:
 
 | Image | Purpose |
 | --- | --- |
-| `ghcr.io/xchewtoyx/hermes-docker` | Headless Hermes plus `curl` and `jq` for instance cron scripts |
+| `ghcr.io/xchewtoyx/hermes-docker` | Headless Hermes plus `curl` and `jq` for diagnostics and automation |
 | `ghcr.io/xchewtoyx/hermes-docker-gui` | XFCE/Xvfb desktop, Chromium, Cua Driver, and a local noVNC viewer |
 
 Both are published as native `linux/amd64` and `linux/arm64` images, so Docker
@@ -21,17 +21,66 @@ with **s6-overlay** (auto-restart on crash, rotated logs). Docker's
 ```bash
 git clone https://github.com/xchewtoyx/hermes-docker.git
 cd hermes-docker
-cp hermes.env hermes.env  # edit: PUID/PGID (host uid of ~/.hermes owner), TZ,
-                          # dashboard basic-auth username/password/secret
+# Edit hermes.env: set dashboard basic-auth password/secret and your timezone.
 docker compose pull
+docker compose run --rm hermes setup
 docker compose up -d
 ```
+
+This is a greenfield-first deployment. Compose creates a persistent
+`hermes-data` named volume, and the upstream image seeds its standard
+`config.yaml`, `.env`, and `SOUL.md` when that volume is empty. The setup command
+then configures providers and other user choices in that volume. Recreating or
+upgrading the container does not remove it.
+
+Run `docker compose run --rm hermes setup` before the first `up -d`; it finalizes
+the freshly seeded configuration using the current Hermes schema.
+
+Do not run `docker compose down -v` unless you intentionally want to delete the
+Hermes state volume and start over.
 
 The repo is public, so the image pulls anonymously — no login needed on the new host:
 
 ```bash
 docker pull ghcr.io/xchewtoyx/hermes-docker:latest
 ```
+
+## Existing installation / migration
+
+Only use the migration overlay when intentionally attaching an existing host
+Hermes home and repositories:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.migration.yml \
+  up -d
+```
+
+For the GUI image, include `docker-compose.gui.yml` before the migration
+overlay. Set `PUID` and `PGID` in `hermes.env` to the owner of the bind-mounted
+directories. See [MIGRATION.md](MIGRATION.md) for the complete transplant flow.
+
+## Container path contract
+
+The canonical state root inside the container is always `$HERMES_HOME`
+(`/opt/data`), whether it is backed by the default named volume or the optional
+host bind mount. Inside the image, resolve Hermes files from that variable—for
+example, `$HERMES_HOME/config.yaml`—rather than assuming
+`~/.hermes/config.yaml`.
+
+`HOME` is intentionally different between process classes:
+
+| Context | `HOME` | Purpose |
+| --- | --- | --- |
+| Gateway, dashboard, and GUI services | `/opt/data` | Hermes service runtime |
+| Agent tool subprocesses | `/opt/data/home` | Persistent, isolated Git/CLI configuration |
+| Raw `docker exec` as root | `/root` | Operator shell; the `hermes` shim drops privileges and resets `HOME` |
+
+Both derived images install `/etc/profile.d/hermes-path.sh`. This restores
+`/opt/hermes/bin`, `/opt/hermes/.venv/bin`, and `/opt/data/.local/bin` after
+Debian's `/etc/profile` resets `PATH`, so `hermes` remains available in nested
+login shells such as `bash -lc`.
 
 ## GUI / local computer use
 
@@ -97,10 +146,13 @@ container image.
 
 - `Dockerfile` — the derived image (ARG BASE_IMAGE to pin the upstream tag/digest)
 - `Dockerfile.gui` — GUI/computer-use image and pinned Cua Driver install
-- `docker-compose.yml` — supervised gateway + dashboard, data at `~/.hermes:/opt/data`
+- `docker-compose.yml` — greenfield deployment with a Docker-managed state volume
 - `docker-compose.gui.yml` — overlay selecting the GUI image and local noVNC port
+- `docker-compose.migration.yml` — optional existing-state and repository bind mounts
+- `docker/common/hermes-path.sh` — preserves Hermes CLI paths in login shells
 - `docker/gui/` — GUI session runner and s6 service wiring
 - `hermes.env` — runtime knobs (PUID/PGID, TZ, dashboard auth) — **not secrets for the agent**
 - `MIGRATION.md` — the brain-transfer playbook from the old coder-workspace instance
 
-Agent API keys live in the mounted `~/.hermes/.env` (never in this repo).
+Agent API keys live at `$HERMES_HOME/.env` in the persistent volume (never in
+this repo).

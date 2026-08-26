@@ -52,8 +52,10 @@ Confirm: `ps aux | grep -E 'hermes (gateway|serve)'` → nothing.
 
     rsync -avz ~/repos/ newhost:~/repos/        # OKF wikis + rgh-botnet
 
-Then on the new host: `chown -R $(id -u):$(id -g) ~/.hermes` (or set PUID/PGID in
-hermes.env to the owning user).
+Then on the new host: `chown -R $(id -u):$(id -g) ~/.hermes` and set `PUID` /
+`PGID` in `hermes.env` to that owning user. The baseline Compose file uses a
+greenfield named volume; this migration uses `docker-compose.migration.yml` to
+replace it with these host bind mounts.
 
 ## Phase 3 — path adjustments (the only edits needed)
 
@@ -85,21 +87,46 @@ hermes.env to the owning user).
 5. Recreate the OKF CLI venv with the container's Python (ABI-safe) once the image
    is built:
 
-       docker compose run --rm hermes bash -lc '
+       docker compose \
+         -f docker-compose.yml \
+         -f docker-compose.migration.yml \
+         run --rm hermes bash -lc '
          python3 -m venv /opt/data/home/.venvs/okf && \
          /opt/data/home/.venvs/okf/bin/pip install --quiet okf-core \
            --index-url https://xchewtoyx.github.io/okf-core/simple/ && \
          /opt/data/home/.venvs/okf/bin/okf --version'
 
+6. Audit copied host scripts for container path and platform assumptions:
+
+   - Resolve Hermes state from `${HERMES_HOME:-$HOME/.hermes}` rather than a
+     literal `$HOME/.hermes`; agent tool subprocesses use `HOME=/opt/data/home`.
+   - Use GNU/Linux command syntax in the Debian image—for example,
+     `stat -c %Y FILE` rather than macOS `stat -f %m FILE`.
+
 ## Phase 4 — bring it up
 
-    docker compose pull && docker compose up -d
+    docker compose \
+      -f docker-compose.yml \
+      -f docker-compose.migration.yml \
+      pull
+    docker compose \
+      -f docker-compose.yml \
+      -f docker-compose.migration.yml \
+      up -d
     docker compose logs -f hermes          # watch gateway boot + Slack connect
 
 For the GUI/computer-use image, select the Compose overlay instead:
 
-    docker compose -f docker-compose.yml -f docker-compose.gui.yml pull
-    docker compose -f docker-compose.yml -f docker-compose.gui.yml up -d
+    docker compose \
+      -f docker-compose.yml \
+      -f docker-compose.gui.yml \
+      -f docker-compose.migration.yml \
+      pull
+    docker compose \
+      -f docker-compose.yml \
+      -f docker-compose.gui.yml \
+      -f docker-compose.migration.yml \
+      up -d
 
 The noVNC viewer is then available on `http://127.0.0.1:6080/vnc.html`; use an
 SSH tunnel when the Docker host is remote rather than publishing it publicly.
@@ -113,6 +140,7 @@ Verification checklist:
     docker exec hermes /command/s6-svstat /run/service/gateway-default
     docker exec hermes /opt/hermes/bin/hermes doctor
     docker exec hermes /opt/hermes/bin/hermes cron status # scheduler lives inside the gateway
+    docker exec hermes bash -lc 'command -v hermes'        # login-shell PATH survives /etc/profile
     curl -s http://localhost:8642/v1/models -H "Authorization: Bearer $API_SERVER_KEY"
     # dashboard: http://<new-host>:9119  → basic-auth login
     # Slack: DM the bot — it must reply
@@ -131,6 +159,6 @@ Recommended for an unattended gateway (docs guidance):
   release. config.yaml (v38) auto-migrates on first boot and will write a
   `config.yaml.bak` like it already has once. The single carried local commit
   (chore: author-map merge of PR #92529) is git-metadata only — safe to drop.
-- Upgrades from now on: `docker compose pull && docker compose up -d`
-  (`hermes update` does not apply inside the immutable image).
+- Upgrades from now on: repeat the migration-overlay `pull` and `up -d`
+  commands above (`hermes update` does not apply inside the immutable image).
 - Rollback: the old box keeps its data untouched until you decommission it.
