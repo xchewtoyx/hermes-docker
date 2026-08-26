@@ -6,8 +6,10 @@
 #   - per-profile gateways get their own s6 slots; logs rotate via s6-log
 #   - container-level recovery is Docker's `restart: unless-stopped` (outer net)
 #
-# DATA: the entire "brain" lives in ~/.hermes, mounted at /opt/data
-# (config, .env, memories, skills, state.db, cron, kanban, sessions, ...).
+# DATA: a Docker-managed named volume is mounted at $HERMES_HOME=/opt/data.
+# On an empty volume the upstream entrypoint seeds the default Hermes config.
+# Existing host installs use docker-compose.migration.yml explicitly.
+# HOME is intentionally process-specific; see README.
 # The image is immutable — upgrades = pull a new tag, never edit the container.
 #
 # IMAGE: pulled from GHCR (built by CI). `build: .` is kept so you can still
@@ -16,7 +18,9 @@
 services:
   hermes:
     image: ghcr.io/xchewtoyx/hermes-docker:latest
-    build: .                    # optional local build override
+    build:
+      context: .               # optional local build override
+      target: headless
     container_name: hermes
     restart: unless-stopped
     command: gateway run        # s6-supervised gateway; cron scheduler runs inside it
@@ -32,15 +36,14 @@ services:
       - "9119:9119"             # dashboard (auth-gated — see hermes.env)
 
     volumes:
-      - ~/.hermes:/opt/data     # single source of truth for all Hermes state
-      - ~/repos:/opt/repos      # OKF wiki repos + rgh-botnet (heartbeat cron uses /opt/repos)
+      - hermes-data:/opt/data   # default config is seeded here on first boot
 
     shm_size: 1g                # Playwright/browser tools need shared memory
 
     deploy:
       resources:
         limits:
-          memory: 4g            # tune to the host (migrating box: 15Gi RAM / 4 vCPU)
+          memory: 4g            # tune to the deployment host
           cpus: "2.0"
 
     # Gateway liveness. `hermes gateway status` exits 0 when the supervised gateway
@@ -51,3 +54,6 @@ services:
       timeout: 20s
       retries: 5
       start_period: 60s
+
+volumes:
+  hermes-data:

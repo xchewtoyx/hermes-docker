@@ -1,0 +1,9 @@
+# Optional overlay for an existing host Hermes installation. Greenfield
+# deployments should use docker-compose.yml by itself and receive a fresh,
+# Docker-managed hermes-data volume initialized by the upstream image.
+
+services:
+  hermes:
+    volumes:
+      - ~/.hermes:/opt/data
+      - ~/repos:/opt/repos

@@ -16,12 +16,15 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # A cold headless build populates the shared devtools cache before the
+      # GUI target adds its desktop layer. Later cloud builds reuse both.
+      max-parallel: 1
       matrix:
         include:
           - image: hermes-docker
-            dockerfile: Dockerfile
+            target: headless
           - image: hermes-docker-gui
-            dockerfile: Dockerfile.gui
+            target: gui
 
     steps:
       - uses: actions/checkout@v7
@@ -65,7 +68,8 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ${{ matrix.dockerfile }}
+          file: Dockerfile
+          target: ${{ matrix.target }}
           platforms: linux/amd64,linux/arm64
           pull: true
           push: true
