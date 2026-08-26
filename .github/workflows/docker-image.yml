@@ -11,68 +11,63 @@ permissions:
   packages: write
 
 jobs:
-  ghcr:
+  images:
+    name: ${{ matrix.image }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: hermes-docker
+            dockerfile: Dockerfile
+          - image: hermes-docker-gui
+            dockerfile: Dockerfile.gui
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: docker/setup-buildx-action@v3
+      # Docker authentication is required to connect to Build Cloud. The same
+      # credentials publish Docker Hub copies when DOCKERHUB_ENABLED=true.
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - uses: docker/login-action@v3
+      - name: Login to GHCR
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Docker Build Cloud
+        uses: docker/setup-buildx-action@v4
+        with:
+          driver: cloud
+          endpoint: "${{ vars.DOCKERHUB_USERNAME }}/${{ vars.CLOUD_BUILDER_NAME || 'clustertool' }}"
+
       - name: Tags
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/xchewtoyx/hermes-docker
+          images: |
+            ghcr.io/xchewtoyx/${{ matrix.image }}
+            name=xchewtoyx/${{ matrix.image }},enable=${{ vars.DOCKERHUB_ENABLED == 'true' }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-,format=short
             type=ref,event=tag
 
-      - uses: docker/build-push-action@v6
+      # Build Cloud has native workers and a managed persistent cache for both
+      # target architectures, so no QEMU or GHA cache exporter is needed.
+      - name: Build and push
+        uses: docker/build-push-action@v7
         with:
           context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          pull: true
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # Push to Docker Hub too — enable with:
-  #   gh variable set DOCKERHUB_ENABLED -b true
-  #   gh secret set DOCKERHUB_USERNAME      (your Docker Hub username)
-  #   gh secret set DOCKERHUB_TOKEN         (an access token with Read/Write, not your password)
-  # Job-level `if` cannot read secrets (only vars), which is why the flag is a variable.
-  dockerhub:
-    if: ${{ vars.DOCKERHUB_ENABLED == 'true' }}
-    needs: ghcr
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Tags
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: xchewtoyx/hermes-docker
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=tag
-
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=gha
+          labels: ${{ steps.meta.outputs.labels }}

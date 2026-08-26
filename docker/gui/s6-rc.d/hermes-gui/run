@@ -1,0 +1,11 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+
+# CUA's Linux backend must own the same non-root desktop session as the apps it
+# automates. The base image intentionally starts s6 as root, so drop here.
+export HOME=/opt/data
+
+if [ "$(id -u)" -eq 0 ]; then
+    exec s6-setuidgid hermes /usr/local/bin/hermes-gui
+fi
+exec /usr/local/bin/hermes-gui

@@ -4,6 +4,7 @@
 .dockerignore
 README.md
 MIGRATION.md
-docker-compose.yml
+docker-compose*.yml
 hermes.env
 *.zip
+graphify-out/

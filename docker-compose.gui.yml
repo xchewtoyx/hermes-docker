@@ -1,0 +1,13 @@
+# Overlay for the GUI-capable image. Use together with docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.gui.yml up -d
+
+services:
+  hermes:
+    image: ghcr.io/xchewtoyx/hermes-docker-gui:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.gui
+    ports:
+      # Passwordless noVNC is deliberately host-loopback-only. On a remote
+      # Linux host, reach it through an SSH tunnel rather than exposing it.
+      - "${NOVNC_BIND_ADDRESS:-127.0.0.1}:${NOVNC_HOST_PORT:-6080}:6080"
