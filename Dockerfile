@@ -3,7 +3,8 @@
 # Targets:
 #   headless (default) — Hermes plus general diagnostics/development tooling
 #   gui                — headless tooling plus XFCE, Chromium, and Cua Driver
-ARG BASE_IMAGE=nousresearch/hermes-agent:latest
+# Hermes Agent v0.21.0 publishes as Docker tag v2026.8.31 (CCP-587).
+ARG BASE_IMAGE=nousresearch/hermes-agent:v2026.8.31
 ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.6@sha256:88bc6eb1ccd4b82efd0e1b530caffabddf50dc2bf612e66c14ea25b8ee8a4d3d
 
 FROM ${UV_IMAGE} AS uv
