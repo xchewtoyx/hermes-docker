@@ -82,7 +82,7 @@ example, `$HERMES_HOME/config.yaml`—rather than assuming
 `HOME` is intentionally different between process classes:
 
 | Context | `HOME` | Purpose |
-| --- | --- |
+| --- | --- | --- |
 | Gateway, dashboard, and GUI services | `/opt/data` | Hermes service runtime |
 | Agent tool subprocesses | `/opt/data/home` | Persistent, isolated Git/CLI configuration |
 | Raw `docker exec` as root | `/root` | Operator shell; the `hermes` shim drops privileges and resets `HOME` |
