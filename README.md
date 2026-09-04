@@ -43,7 +43,17 @@ The repo is public, so the image pulls anonymously — no login needed on the ne
 
 ```bash
 docker pull ghcr.io/xchewtoyx/hermes-docker:latest
+docker pull ghcr.io/xchewtoyx/hermes-docker:v0.21.0   # immutable release tag
 ```
+
+## Base image pin
+
+`Dockerfile` builds `FROM nousresearch/hermes-agent:v2026.8.31` (Hermes Agent
+**v0.21.0**, which ships Bot Mode / `hermes peer`). Default-branch builds
+publish `:latest` and `sha-*` only. Immutable GHCR tags come from git tags
+(`v*`): after merging a base-image bump, `git tag v0.21.0 && git push origin
+v0.21.0` publishes `ghcr.io/xchewtoyx/hermes-docker:v0.21.0` and
+`hermes-docker-gui:v0.21.0`. Do not retag `v0.21.0` from later main commits.
 
 ## Existing installation / migration
 
@@ -160,6 +170,10 @@ The workflow requires these repository settings:
 - Optional variable `CLOUD_BUILDER_NAME`; it defaults to `clustertool`.
 - Optional variable `DOCKERHUB_ENABLED=true` to publish both images to Docker
   Hub as well as GHCR.
+
+The Hermes Agent base is pinned by `BASE_IMAGE` in `Dockerfile` (currently
+`nousresearch/hermes-agent:v2026.8.31`). Bump that ARG together with a new
+git tag when cutting a release; `latest` follows `main`, version tags do not.
 
 The Cua Driver version is pinned by `CUA_DRIVER_VERSION` in the `gui` target of
 `Dockerfile` and can be overridden with a build argument. Cua telemetry and
